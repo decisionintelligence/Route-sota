@@ -1,0 +1,7 @@
+{
+  "name": "generate",
+  "version": "1.0.0",
+  "dependencies": {
+    "mkgraph": "~1.1.0"
+  }
+}
