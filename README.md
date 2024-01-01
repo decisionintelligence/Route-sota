@@ -4,9 +4,9 @@ The route-sota project is an implementation intended to test, examine, and measu
 
 This readme is composed of 3 parts:
 
-- A folder overview: Explains what types of files can be found where in the project.
-- A user guide: Gives both a quick guide and a detailed guide for how to transform raw data into routing information.
-- A file overview. Describes what programs in the project requires which files, and where they come from.
+- Folder overview: Explains what types of files can be found where in the project.
+- User guide: Gives both a quick guide and a detailed guide for how to transform raw data into routing information.
+- File overview. Describes what programs in the project requires which files, and where they come from.
 
 ## Folder overview
 
