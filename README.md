@@ -17,7 +17,6 @@ The program is split into three important directories:
     1. The `data/` directory contains files concerning themselves with geographic data and time measurements, such as trajectories, graph descriptions, and queries for routing.
     2. The first level of under-directories directly under `data/` contains the files generated based on chosen trajectories and geographic locations, as well as the number of threads used to generate these, as that results in different files and processing thereof.
     3. The under-directories can contain a set of one or more under-directories themselves, which files vary depending on the chosen sigma value and the chosen queries to pursue. Note that queries are used to "limit" `get_policy_u.py` to relevant vertices, not for any actual computation.
-  - The actual data-files used for testing can be found in a google drive folder, for which access can be provided, if asked. Otherwise, the necessary data-files must be constructed manually, where possible.
 - generate
   - Contains the programs used to generate the files necessary for the routing algorithms. Contains 5 programs of import. For a detailed explanation of their usage, see the user guide. It also contains some shell-files that can be used to run the files, but it is more useful to manually run each individual python file as a number of manual edits are needed inside each for any modifications or changes.
     - `get_overlap.py`
