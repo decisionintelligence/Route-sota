@@ -11,18 +11,26 @@ import gzip
 import json
 import operator
 import networkx as nx
+from tqdm import tqdm
 import pickle
 from get_tpath import TPath
 from v_opt import VOpt
 from math import cos, asin, sqrt, pi
+import random
 
 
-
+# # haversin
 def distance(lat1, lon1, lat2, lon2):
-    r = 6731  # 地球平均半径
+    r = 6731  
     p = pi / 180
     a = 0.5 - cos((lat2 - lat1) * p) / 2 + cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2
     return 2 * r * asin(sqrt(a))
+
+
+# def distance(lat1, lon1, lat2, lon2):  
+    # return np.linalg.norm(np.array([lat1, lon1]) - np.array([lat2, lon2]))
+
+
 class GenVP():
     def __init__(self, filename, subpath, p_path, subpath_range, fpath_desty, fpath_count, foverlap, B, store_desty_fname, threads_num, store_degree_fname, store_degree_fname2, graph_path, graph_store_fname,axes_file , dinx):
         self.filename = filename
@@ -51,7 +59,7 @@ class GenVP():
         with open(self.graph_path) as fn:
             for line in fn:
                 line = line.strip().split('\t')
-                speed_dict[line[0]] = {3600*float(line[1])/float(line[2]): 1.0}
+                speed_dict[line[0]] = {int(3600*float(line[1])/float(line[2])): 1.0}  
         return speed_dict
 
     def load(self, ):
@@ -69,7 +77,7 @@ class GenVP():
     def get_distance(self, points, point):
         (la1, lo1) = points[point[0]]
         (la2, lo2) = points[point[1]]
-        # return geodesic((lo1, la1), (lo2, la2)).kilometers
+
         return distance(la1, lo1, la2, lo2)
 
     def get_distance2(self, points, path_1, path_2):
@@ -79,7 +87,6 @@ class GenVP():
         point2 = path_1[a+1:].split(";")[0]
         (la1, lo1) = points[point1]
         (la2, lo2) = points[point2]
-        # d1 = geodesic((lo1, la1), (lo2, la2)).kilometers
         d1=distance(la1, lo1, la2, lo2)
         a = path_2.find('-')
         point3 = path_2[:a]
@@ -87,13 +94,10 @@ class GenVP():
         point4 = path_2[a+1:].split(";")[0]
         (la3, lo3) = points[point3]
         (la4, lo4) = points[point4]
-        # d2 = geodesic((lo3, la3), (lo4, la4)).kilometers
-        # d3 = geodesic((lo1, la1), (lo4, la4)).kilometers
-        # d4 = geodesic((lo2, la2), (lo3, la3)).kilometers
         d2=distance(la3, lo3, la4, lo4)
         d3 = distance(la1, lo1, la4, lo4)
         d4 = distance(la2, lo2, la3, lo3)
-        dd = max(d3, d4)
+        dd = max(d3, d4)     
         if dd < d2 or dd < d1:
             return True
         return False
@@ -111,12 +115,6 @@ class GenVP():
         return list(anodes), list(aedges)
 
     def get_overlap(self, ):
-        # fn = open(self.subpath+self.foverlap)
-        # overlap = {}
-        # for line in fn:
-        #     temp = line.strip().split(':')
-        #     overlap[temp[0]] = temp[1].split(',')
-        # fn.close()
         with open(self.subpath + self.foverlap, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -124,13 +122,7 @@ class GenVP():
         return overlap
 
     def get_dict(self, ):
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        #     #path_desty =  dict(sorted(path_desty.items(), key=operator.itemgetter(0), reverse=False))
-        # with open(self.subpath+self.fpath_count) as js_file:
-        #     path_count = json.load(js_file)
-        #     #path_count =  dict(sorted(path_count.items(), key=operator.itemgetter(0), reverse=False))
-
+        
         with open(self.subpath + self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -164,15 +156,15 @@ class GenVP():
         return path_desty, path_count, path_num, overlap, TP
 
     def check_loop(self, path_):
+        path_1 = path_.split(';')
+        path_2 = set(path_1)
+        if len(path_1) > len(path_2):
+            return True
         start = path_.find('-')
         head = path_[:start]
         end = path_.rfind('-')
         tail = path_[end+1:]
         if head in path_[start:] or tail in path_[:end]:
-            return True
-        path_ = path_.split('-')
-        path_2 = set(path_)
-        if len(path_) > len(path_2):
             return True
         return False
 
@@ -191,10 +183,10 @@ class GenVP():
             psi = path_2 + ';' + path_1[b+1:]
             e1 = path_2.find('-')
             e2 = path_1.rfind('-')
-            head, tail = path_2[:e1], path_1[e2+1:]
+            head, tail = path_2[:e1], path_1[e2+1:]  
             return psi, path_2[end2:], flag, a, head+'-'+tail
 
-    def merge(self, p1, p2, f, s, vopt, path_desty, edge_time_freq):
+    def merge(self, p1, p2, f, s, vopt, path_desty, edge_time_freq,speed):
 
         def get_w(w1, w2, ws):
             wk1, wk2 = list(w1.keys()), list(w2.keys())
@@ -215,7 +207,7 @@ class GenVP():
                 for i in range(N):
                     for j in range(J):
                         for l in range(M):
-                            n_k = str(int(wk1[i]) + int(wk2[j]) - int(wks[l]))
+                            n_k = str(int(wk1[i]) + int(wk2[j]) - int(float(wks[l])))
                             if n_k in new_w:
                                 new_w[n_k] += float(w1[wk1[i]]) * float(w2[wk2[j]]) / float(ws[wks[l]])
                             else:
@@ -228,17 +220,15 @@ class GenVP():
                 for kew_ in kew:
                     vew = kew[kew_]
                     
-        speed=self.get_speed()
+        
         w1 = path_desty[p1]
         w2 = path_desty[p2]
         if s in path_desty:
             ws = path_desty[s]
         else:
             if s in edge_time_freq:
-                ws = edge_time_freq[s]
+                ws = edge_time_freq[s]    
             else:
-                #self.mid_olp[ws] = 
-                # ws = edge_time_freq[s.split(';')[0]]
                 if s in speed:
                     ws=speed[s]
                 else:
@@ -250,20 +240,20 @@ class GenVP():
         return new_w
 
     def check_domin(self, AA, BB):
-        B1, B2 = list(BB.keys()), list(BB.values())
+        B1, B2 = list(map(int,BB.keys())), list(map(float,BB.values()))
         dom, B_len = 0, len(B1)
         for (_, Q) in AA:
             q_len = len(Q)
             M = min(B_len, q_len)
-            A1, A2 = list(Q.keys()), list(Q.values())
+            A1, A2 = list(map(int,Q.keys())), list(map(float,Q.values()))
             a, b = 0, 0
             for m in range(M):
-                if int(A1[m]) > int(B1[m]):
+                if A1[m] > B1[m]:
                     a += 1
-                elif int(A1[m]) < int(B1[m]):
+                elif A1[m] < B1[m]:
                     b += 1
                 else:
-                    if float(A2[m]) > float(B2[m]):
+                    if A2[m] > B2[m]:
                         a += 1
                     else:
                         b += 1
@@ -281,19 +271,17 @@ class GenVP():
         try:
             path_num_, over_ = {}, {}
             all_ =  0
+            speed=self.get_speed()
             for p_in in in_list_:
                 #print('p_in %s'%p_in)
                 tp_in, spoint = self.get_tpaths(p_in)
                 for t_p in tp_in:
-                    # if t_p not in overlap :
-                        # print(t_p)
                     dict_inx = -1
                     if t_p in overlap:
-                        T_overlapping = overlap[t_p]
+                        T_overlapping = overlap[t_p]   
                     else:
                         # print(t_p)
                         continue
-                    # if len(T_overlapping[0]) < 1:  #T_overlapping[0] 是int
                     if len(T_overlapping) < 1:
                         continue
                     for t_o in T_overlapping: # for it's overlapping paths
@@ -303,31 +291,32 @@ class GenVP():
                         path_2 = path_count[p_in]
                         if self.get_distance2(points, path_1, path_2):
                             continue
-                        psi, s, fg, is_s, TP_new = self.compose_path2(path_1, path_2)
-                        #print('TP_new %s'%TP_new)
+                        psi, s, fg, is_s, TP_new = self.compose_path2(path_1, path_2)   
+
                         if psi == '' or not is_s: continue
-                        if TP_new in TP: continue
+                        if TP_new in TP: continue   
                         if self.check_loop(psi): continue
+                        if len(psi.split(';'))>=150: continue    
                         if psi not in path_num and psi not in over_:
                             if not fg:
-                                t_over = self.merge(path_1, path_2, psi, s, vopt, path_desty, edge_time_freq)
+                                t_over = self.merge(path_1, path_2, psi, s, vopt, path_desty, edge_time_freq,speed)
                                 new_ = 'v;'+t_o+';'+p_in[spoint:]
                             else:
-                                t_over = self.merge(path_2, path_1, psi, s, vopt, path_desty, edge_time_freq)
+                                t_over = self.merge(path_2, path_1, psi, s, vopt, path_desty, edge_time_freq,speed)
                                 new_ = 'v;'+p_in[spoint:]+';'+t_o
-                            if TP_new not in All_Path:
+                            if TP_new not in All_Path:    
                                 All_Path[TP_new] = [(psi, t_over)]
                                 over_[psi] = t_over
                                 all_ += 1
                                 path_num_[psi] = new_
-                            else:
+                            else:                     
                                 if self.check_domin(All_Path[TP_new], t_over):
                                     All_Path[TP_new].append((psi, t_over))
                                     over_[psi] =  t_over
                                     all_ += 1
                                     path_num_[psi] = new_
             print(f"Finished thread {os.getpid()}")
-            return [path_num_, over_]  # , All_Path]
+            return [path_num_, over_]  
         except Exception as e:
             print("There was an error at pid %d %d"%(os.getpid(), all_))
             print(e)
@@ -335,8 +324,6 @@ class GenVP():
             traceback.print_exception(*trace)
             del trace
 
-        #finally:
-            # return []
 
 
     def collect_res(self, result):
@@ -344,7 +331,6 @@ class GenVP():
 
     def gen(self, vopt, path_desty, path_count, path_num, overlap, edge_time_freq, TP, points):
         in_list = list(path_count.keys())
-        #in_list = in_list[:20]
         '''multi processes 
         '''
         '''kkk = 0
@@ -361,6 +347,7 @@ class GenVP():
         All_Path = Manager().dict()
         linx = 0
         print(len(in_list))
+        all_begin_t = time.time()
         while len(in_list) > 0: 
             self.result = []
             print('length of in list %d' %len(in_list))
@@ -369,6 +356,7 @@ class GenVP():
             print('path num %d'%(len(path_num)))
             begin_t = time.time()
             len_in = len(in_list)
+            random.shuffle(in_list)     
             if len_in % self.threads_num == 0:
                 t_inxs = int(len_in/self.threads_num)
             else:
@@ -377,24 +365,21 @@ class GenVP():
             for len_thr in range(self.threads_num):
                 mins = min((len_thr+1)*t_inxs, len_in)
                 inxs_array = in_list[len_thr*t_inxs:mins]
-                # print(type(inxs_array))
-                # print(len(inxs_array))
+
+                
                 pool.apply_async(
                     self.thread_fun,
                     args=(inxs_array,vopt, path_desty, path_count, path_num, overlap, edge_time_freq, TP, All_Path, points),
-                    callback=self.collect_res)#.get()
+                    callback=self.collect_res)
             pool.close()
             time.sleep(10)
             pool.join()
             time.sleep(10)
-            #print("res: desty={desty}, freq={freq}, err={err}".format
-             #     (desty=self.mergeres["desty"],freq=self.mergeres["freq"],err=self.mergeres["err"]))
-            #print("result size = %d"%len(self.result))
+
             path_num2, path_count2= {}, {}
             print(f"Got to Res: {len(self.result)}")
-            # print(self.result[0])
+
             for res in self.result:
-                #in_list.extend(res[-1])
                 if res==None:
                     print("there is a none")
                     continue
@@ -402,9 +387,6 @@ class GenVP():
                 var2 = res[1]
                 path_num2.update(var1)
                 path_desty.update(var2)
-                #All_Path.update(res[2])
-                #print(res[0])
-                #print(res[1])
             print('len path num2 %d' %len(path_num2))
             in_list = path_num2.values()
             new_edges = set()
@@ -425,18 +407,9 @@ class GenVP():
             print('len set list %d'%len(in_list))
             end_time=int(time.time()-begin_t)
             print('time cost %d'%end_time)
-            #in_list = []
-            # with(open(self.subpath+"time.txt", 'a+')) as fw:
-            #     fw.write(" "+str(end_time))
-            '''out_degree = self.mkgraph.G.degree(self.anodes)
-            out_degrees.append([l[1] for l in out_degree])
-            out_degree = self.mkgraph.G.degree(self.nodes)
-            out_degrees2.append([l[1] for l in out_degree])
-            #out_degrees.append(out_degree)
-            kkk += 1'''
+            print('all time cost %d'%int(time.time()-all_begin_t))
             print("end of while")
-
-        return path_desty, All_Path #out_degrees, out_degrees2
+        return path_desty, All_Path 
     
     def norms(self, dicts2, is_norm):
         for e_key in dicts2:
@@ -448,7 +421,7 @@ class GenVP():
         return dicts2
 
     def get_vopt(self, vopt, dicts, is_path=False, is_norm=False):
-        for e_key in dicts:
+        for e_key in tqdm(dicts):
             time_freq = dicts[e_key] 
             time_cost, time_freq = [float(l) for l in time_freq.keys()], [float(l) for l in time_freq.values()]
             # print(time_cost)
@@ -463,7 +436,6 @@ class GenVP():
         return self.norms(dicts, is_norm)
 
     def write_json(self, js_dict, fname):
-        #json.dumps(js_dict, fname)
         with open(fname, 'w') as fw:
             json.dump(js_dict, fw, indent=4)
 
@@ -473,14 +445,6 @@ class GenVP():
         with open(fname, 'wb') as fw:
             fw.write(compressed_string)
 
-    # def write_degree(self, out_degrees_, fname):
-    #     temp = pd.DataFrame()
-    #     temp['node'] = out_degrees_[0]
-    #     strs = 0
-    #     for out_degree in out_degrees_[1:]:
-    #         temp[str(strs)] = out_degree
-    #         strs += 1
-    #     temp.to_csv(fname, sep=';', index=None)
     def write_degree(self, out_degrees_, fname):
         temp = pd.DataFrame()
         temp['node'] = out_degrees_[0]
@@ -488,7 +452,7 @@ class GenVP():
         for out_degree in out_degrees_[1:]:
             temp[str(strs)] = out_degree
             strs += 1
-        tem_str = temp.to_string()
+        tem_str = temp.to_string()  
         compressed_string = gzip.compress(tem_str.encode())
         with open(fname, 'wb') as fw:
             fw.write(compressed_string)
@@ -496,10 +460,7 @@ class GenVP():
     def store_graph(self, fname):
         strs = ''
         for edge_ in self.edges:
-        #for edge_ in self.mkgraph.G.edges():
             strs += edge_[0]+'-'+edge_[1]+'\n'
-        # with open(fname, 'w') as fw:
-        #     fw.write(strs)
         compressed_string = gzip.compress(strs.encode())
         with open(fname, 'wb') as fw:
             fw.write(compressed_string)
@@ -509,6 +470,7 @@ class GenVP():
             content = fw.read()
             a = gzip.decompress(content).decode()
             edge_time_freq = json.loads(a)
+        
         return edge_time_freq
 
     def main(self, ):
@@ -520,72 +482,92 @@ class GenVP():
         for edge in aedges:
             self.edges.add(str(edge[0] + '-' + str(edge[1])))
         self.anodes = anodes
-        points = self.get_axes()#点的经纬度
+        points = self.get_axes()
         path_desty, path_count, path_num, overlap, TP = self.get_dict()
-        
+        num=0
+        for i in overlap:
+            if len(overlap[i])>0:
+                num+=1
+        print('all edge %d'%len(overlap))
+        print('all overlap edge %d'%num)
         vopt = VOpt()
-        print('v opt edge ...')
-        # self.edge_time_freq = multiprocessing.Manager().dict()
-        # edge_time_freq = self.get_vopt(vopt, edge_time_freq, False, True) TODO fix this
-        path_desty = self.get_vopt(vopt, path_desty, True, True)
-        # self.write_json(path_desty, self.subpath + "new_desty_10.json")
         print('gen ...')
         #self.vopt = vopt
         path_desty, All_Path = self.gen(vopt, path_desty, path_count, path_num, overlap, edge_time_freq, TP, points)
         print('path desty length %d'%len(path_desty))
-        #self.write_degree(out_degrees, self.subpath+self.store_degree_fname)
-        #self.write_degree(out_degrees2, self.subpath+self.store_degree_fname2)
-        self.store_graph(self.subpath+self.graph_store_fname)
+        self.store_graph(self.subpath+self.graph_store_fname)   
         All_Path_ = {}
         for ak in All_Path:
             All_Path_[ak] = All_Path[ak]
         self.write_gzip(All_Path_, self.subpath+self.store_desty_fname)
+        count_num=[0]*6
+        for i in All_Path_:
+            for j in All_Path_[i]:
+                length=len(j[0].split('-'))
+                if length==2:
+                    count_num[0]+=1
+                elif length>2 and length<=10:
+                    count_num[1]+=1
+                elif length>10 and length<=25:
+                    count_num[2]+=1
+                elif length>25 and length<=50:
+                    count_num[3]+=1
+                elif length>50 and length<=100:
+                    count_num[4]+=1
+                else:
+                    count_num[5]+=1
+        with open(subpath+'v_path_num.txt', 'w+') as fw:
+            fw.write("2\t2-10\t11-25\t25-50\t51-100\t>100\n")
+            fw.write("\t".join(list(map(str,count_num))))
         print("Finished")
 
 if __name__ == '__main__':
-    # dinx = 100
     dinxs = [50]
     process_num = 10
-    datasets=["peak","offpeak"]
-    city='cd'  ##cd aal
+    flag=1
+    datasets=["offpeak"] #["peak","offpeak"]
+    city='xa'  ##cd aal xa
     # datasets=["offpeak"]
     for dataset in datasets:
         all_running_time=[]
         for dinx in dinxs:
             if city=='aal':
-                filename = '../data/AAL_short_50_'+dataset+'.csv'
-                subpath = '../data/'+dataset+'_res%d/' % dinx
+                filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+                subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+                subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag 
                 graph_path = '../data/AAL_NGR'
                 axes_file = '../data/aal_vertices.txt'
-            else:
+            elif city=='cd':
                 filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
-                subpath = '../data/'+dataset+'_cd_res%d/' % dinx
+                subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
                 graph_path = '../data/full_NGR'
                 axes_file = '../data/cd_vertices.txt'
+            else:
+                subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+                if flag==1:
+                    filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+                else:
+                    filename = '../data/xa/new_days15_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+                graph_path = '../data/xa/XIAN_R_new.txt'
+                axes_file = '../data/xa/xa_vertices.txt'
             p_path = 'path_travel_time_'
-            # fpath_count = 'path_count%d.json'%dinx
-            # fpath_desty = 'path_desty%d.json'%dinx
             fpath_count = 'path_count%d.txt' % dinx
             fpath_desty = 'path_desty%d.txt' % dinx
             foverlap = 'overlap%d.txt'% dinx
             # axes_file = '../data/vertices.txt'
-            subpath_range = [l for l in range(2, 12)]
+            subpath_range = [l for l in range(2, 39)]
             B = 3
             threads_num = 10
-            # store_desty_fname = 'KKdesty_num_%d.json'%threads_num
-            # store_degree_fname = 'KKdegree_%d.json'%threads_num
-            # store_degree_fname2 = 'KKdegree2_%d.json'%threads_num
-            store_desty_fname = 'KKdesty_num_%d.txt' % threads_num
+            store_desty_fname = 'KKdesty_num_%d.txt' % threads_num    
             store_degree_fname = 'KKdegree_%d.txt' % threads_num
             store_degree_fname2 = 'KKdegree2_%d.txt' % threads_num
-            graph_store_fname = 'KKgraph_%d.txt'%threads_num
+            graph_store_fname = 'KKgraph_%d.txt'%threads_num     
             begin_t = time.time()
             genvp = GenVP(filename, subpath, p_path, subpath_range, fpath_desty, fpath_count, foverlap, B, store_desty_fname, threads_num, store_degree_fname, store_degree_fname2, graph_path, graph_store_fname, axes_file, dinx)
             genvp.main()
             end_time=int(time.time()-begin_t)
             print('time cost %d'%end_time)
             all_running_time.append(end_time)
-            #in_list = []
         with(open('../data/'+city+dataset+"_running_time.txt", 'w+')) as fw:
             all_time=""
             for i in range(len(all_running_time)):

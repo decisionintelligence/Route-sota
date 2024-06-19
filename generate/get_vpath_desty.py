@@ -60,22 +60,26 @@ if __name__ == "__main__":
     fname = '../data/AAL_short_50_offpeak.csv'
     # dinxs = [15, 30, 50, 100]
     dinxs = [50]
-    city='aal'  ##cd aal
-    datasets=["peak","offpeak"]
+    city='xa'  ##cd aal xa
+    flag=1
+    datasets=["offpeak"]
     for dataset in datasets:
         for dinx in dinxs:
             if city=='aal':
-                filename = '../data/AAL_short_50_'+dataset+'.csv'
-                subpath = '../data/'+dataset+'_res%d/' % dinx
+                fname = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+                subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            elif city=='cd':
+                fname = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+                subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
             else:
-                filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
-                subpath = '../data/'+dataset+'_cd_res%d/' % dinx
+                fname = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+                subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
             B = 3
             # subpath='../data/res%d/'%dinx
             # subpath = '../data/peak_res%d/' % dinx
             # subpath = '../data/offpeak_res%d/' % dinx
             tpath = TPath(fname, subpath=subpath, process_num=50, dinx=50)
-            data = tpath.load()
+            data = tpath.load(flag)
             print("done")
             # edge_desty = tpath.get_edge_freq(data)
             # print(edge_desty)
@@ -113,7 +117,7 @@ if __name__ == "__main__":
             # with open(ffname, 'w') as fw:
             #     json.dump(edge_desty_1, fw, indent=4)
 
-            ffname = subpath+'M_edge_desty.txt'
+            ffname = subpath+'M_edge_desty.txt'   ###存储每个路径的cost分布
             js_dict_ = json.dumps(edge_desty_1)
             compressed_string = gzip.compress(js_dict_.encode())
             with open(ffname, 'wb') as fw:

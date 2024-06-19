@@ -13,6 +13,7 @@ import argparse
 import gzip,math
 import networkx as nx
 from get_tpath import TPath
+from tqdm import tqdm
 
 class Rout:
     #def __init__(self, G, maxsize, node_size, eta, node_list, graph_store_name, time_budget ):
@@ -42,84 +43,22 @@ class Rout:
         return speed_dict
 
     def get_graph(self, edge_desty):
-        speed_dict = self.get_speed()
-        all_nodes, all_edges = set(), set()
-        for key in speed_dict:
-            line = key.split('-')
-            all_nodes.add(line[0])
-            all_nodes.add(line[1])
-            all_edges.add(key)
-        all_nodes, all_edges = list(all_nodes), list(all_edges)
-        All_edges = []
-        for edge in all_edges:
-            edge_ = edge.split('-')
-            if edge in edge_desty:
-                cost1 = edge_desty[edge].keys()
-                cost = min(float(l) for l in cost1)   ###记录最小代价
-                All_edges.append((edge_[0], edge_[1], cost))
-            elif edge in speed_dict:
-                cost1 = speed_dict[edge].keys()
-                cost = min(float(l) for l in cost1)
-                All_edges.append((edge_[0], edge_[1], cost))  ###限速计算的最小代价
-        for edge in speed_dict:
-            if edge not in edge_desty:
-                edge_desty[edge] = speed_dict[edge]   ##用限速进行补充
-        G2 = nx.DiGraph()
-        G2.add_nodes_from(all_nodes)
-        G2.add_weighted_edges_from(All_edges)
-        # fn = open(self.subpath+self.graph_store_name)
-
-
-
         with open(self.subpath + self.graph_store_name, 'rb') as f:
             content = f.read()
             fn = gzip.decompress(content).decode()   
-
-        edges, edges_p, nodes, nodes_p = [], [], set(), set()
-        l, l2 = 0, 0
-        lines=fn.split("\n")
-        for line in lines:     
-            line = line.strip()
-            if line not in edge_desty :
-                if line in speed_dict:
-                    edge_desty[line] = speed_dict[line]
-                    All_edges.append((line.split("-")[0], line.split("-")[0][1], speed_dict[line].keys()[0]))
-                else:
-                    l += 1
+        
+        lines=set(fn.split('\n'))
+        count_num={}
+        for i in tqdm(lines):
+            if len(i)<=2:
                 continue
-            l2 += 1
-            line = line.split('-')
-
-            edges.append((line[0], line[1]))
-            nodes.add(line[0])
-            nodes.add(line[1])
-        # fn.close()
-        print('%d %d'%(l, l2))   ## 缺失分布与拥有的分布数量
-        for key in speed_dict:
-            kk = key.strip().split('-')
-            nodes.add(kk[0])
-            nodes.add(kk[1])
-            edges.append((kk[0], kk[1]))
-            if key not in edge_desty:
-                edge_desty[key] = speed_dict[key]
-        #nodes_other = nodes - nodes_p
-        nodes = list(nodes)
-        nodes_p = list(nodes_p)
-        print('len nodes %d'%len(nodes))
-        print('len nodes_p %d'%len(nodes_p))
-        G = nx.DiGraph()
-        G.add_nodes_from(nodes)
-        G.add_edges_from(edges)
-
-        min_v={}
-        for i in All_edges:
-            min_v[i[0]+"-"+i[1]]=i[2]
-        js_dict_ = json.dumps(min_v)   ##all length  783348
-        compressed_string = gzip.compress(js_dict_.encode())
-        with open(self.subpath + "get_min.txt", 'wb') as f:
-            f.write(compressed_string)
-
-        return edges, nodes, edge_desty, G2
+            out=i.split('-')[0]
+            if out not in count_num:
+                count_num[out]=0
+            count_num[out]+=1
+        print(max(count_num.values())/10)
+        print(sum(count_num.values())/117415)
+        return 0
     
     def get_dict(self, ):
         
@@ -131,10 +70,6 @@ class Rout:
             a = gzip.decompress(content).decode()
             edge_desty = json.loads(a)
 
-            
-        for i in edge_desty:
-            for j in edge_desty[i]:
-                edge_desty[i][j]=float(edge_desty[i][j]/sum(edge_desty[i].values()))
         # f=gzip.open(self.subpath+self.fedge_desty, 'rb')
         # print(f[:100])
         # edge_desty = json.loads(f)
@@ -287,18 +222,18 @@ class Rout:
             AH = np.argwhere(U_ > 0.999999)
             if len(AL) == 0:
                 al = 0
-                # strs += str(0)+'\n'
+                strs += str(0)+'\n'
                 min_strs += str(0)+'\n'
             else:
                 al = AL[0][0]
-                # if len(AH) == 0:
-                #     ah = self.eta
-                # else:
-                #     ah = AH[0][0]
-                # if al==ah:
-                #     strs += str(al)+'\n'
-                # else:
-                #     strs += str(al)+';'+';'.join(str(l) for l in U_[al:ah])+'\n'
+                if len(AH) == 0:
+                    ah = self.eta
+                else:
+                    ah = AH[0][0]
+                if al==ah:
+                    strs += str(al)+'\n'
+                else:
+                    strs += str(al)+';'+';'.join(str(l) for l in U_[al:ah])+'\n'
                 min_strs+=str(al-1)+'\n'
             #strs += ky+';'+';'.join(str(l) for l in U_) + '\n'
         # with(open(self.umatrix_path+name, 'w')) as fw:
@@ -314,54 +249,17 @@ class Rout:
         with open(self.umatrix_path+"/min/"+name, 'wb') as fw:
             fw.write(compressed_string)
 
-        # compressed_string = gzip.compress(strs.encode())
-        # with open(self.umatrix_path+name, 'wb') as fw:
-        #     fw.write(compressed_string)
+        compressed_string = gzip.compress(strs.encode())
+        with open(self.umatrix_path+name, 'wb') as fw:
+            fw.write(compressed_string)
 
     def collect_res(self, sub_res):
         self.result.extend(sub_res)
 
     def main(self,):
         edge_desty = self.get_dict()
-        edges, nodes, edge_desty, G = self.get_graph(edge_desty)
-        with(open(self.query_file, 'rb')) as f:
-            r_pairs = pickle.load(f)
-        node_set = set()
-        for outer in r_pairs:
-            for inner in outer:
-                node_set.add(inner[0])
-                node_set.add(inner[1])
-        node_set = list(node_set)
-        nodes_order, nodes_order_r = {}, {}
-        self.result = []
-        final_inx = []
-        i = 0
-        for node in nodes:
-            nodes_order[node] = i
-            nodes_order_r[i] = node
-            i += 1
-        print(f"nodes_order = {len(nodes_order)}")
-        N = len(node_set)
-        for node in node_set:
-            if node not in nodes_order:
-                print("Stop")
-        if N % self.process_num == 0:
-            t_inx = int(N/self.process_num)
-        else:
-            t_inx = int(N/self.process_num)+1
-        
-        pool = multiprocessing.Pool(self.process_num)
-        print('begin ... ')
-        for len_thr in range(self.process_num):
-            mins = min((len_thr+1)*t_inx, N)
-            sub_array = node_set[len_thr*t_inx:mins]   ##理论上应该预先处理所有的点（27671个）作为目的地的U矩阵 计算时直接按比例相乘
-            print(len(sub_array))
-            pool.apply_async(self.rout, args=(sub_array, edge_desty, edges, nodes,  nodes_order, G))
-        pool.close()
-        pool.join()
-        
-        print('len result %d'%len(self.result))
-        print('process end ...')
+        _= self.get_graph(edge_desty)
+        print('end ...')
 
 if __name__ == '__main__':
 
@@ -372,10 +270,10 @@ if __name__ == '__main__':
     datasets=["peak"]
     # datasets=["offpeak"]
     for dataset in datasets:
-        # sigma_list = [30, 60, 120, 240]
-        # eta_list = [333, 170, 80, 33]
-        sigma_list = [240]
-        eta_list = [33]
+        sigma_list = [30, 60, 120, 240]
+        eta_list = [333, 170, 80, 33]
+        sigma_list = [60]
+        eta_list = [170]
         all_running_time=[]
         for i in range(len(eta_list)):
             eta, sigma = eta_list[i], sigma_list[i]
@@ -384,8 +282,8 @@ if __name__ == '__main__':
             time_budget = 1000
             maxsize = 10000
             # dinx = 100
-            # dinxs = [15, 30, 50, 100]
-            dinxs = [50]
+            dinxs = [15, 30, 50, 100]
+            # dinxs = [50]
             flag=1
             for dinx in dinxs:
                 if city=='aal':
@@ -416,8 +314,7 @@ if __name__ == '__main__':
                 fpath_desty = 'KKdesty_num_%d.txt' % process_num
                 graph_store_name = 'KKgraph_%d.txt' % process_num
                 # fedge_desty = 'M_edge_desty.json'
-                # fedge_desty = 'M_edge_desty.txt'
-                fedge_desty = 'edge_travel_time.txt'
+                fedge_desty = 'M_edge_desty.txt'
                 umatrix_path = subpath + 'u_mul_matrix_sig%d/' % sigma
                 os.makedirs(subpath + "u_mul_matrix_sig%d/" % sigma, exist_ok=True)
                 # speed_file = '../data/AAL_NGR'
@@ -435,10 +332,5 @@ if __name__ == '__main__':
                     # rout.main()
                 except Exception as e:
                     print(e)
-        with(open('../data/'+city+dataset+"_B_U_running_time.txt", 'w+')) as fw:
-            all_time=""
-            for i in range(len(all_running_time)):
-                all_time+=str(eta_list[i])+": "+str(all_running_time[i])+"\n"
-            fw.write(all_time)
     print("finished")
 
