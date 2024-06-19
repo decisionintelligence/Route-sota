@@ -108,7 +108,7 @@ Requirements:
 
 9. Running "get_policy_U.py"
 
-You now have All the files you need to run the routing algorithms. Before running one, remember to set all the paths and values to those that you desire. For an example:
+You now have All the files you need to run the routing algorithms. Before running one, remember to set all the paths and values to those that you desire. 
 
 ## file overview
 
