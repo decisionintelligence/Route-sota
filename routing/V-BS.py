@@ -15,6 +15,8 @@ import copy
 import argparse
 import gzip
 from v_opt import VOpt
+import math
+from math import cos, asin, sqrt, pi
 
 class Rout():
     def __init__(self, fpath, T, fpath_desty, fedge_desty, subpath, axes_file,  speed_file, sigma, eta, query_name):
@@ -34,6 +36,7 @@ class Rout():
         self.pairs_num = 90
         self.speed_file = speed_file
         self.query_name = query_name
+        self.nodes={}
     
 
     def get_axes(self, ):
@@ -47,43 +50,48 @@ class Rout():
     def get_distance(self, points, point):
         (la1, lo1) = points[point[0]]
         (la2, lo2) = points[point[1]]
-        return geodesic((lo1, la1), (lo2, la2)).kilometers
+        return self.distance(la1, lo1, la2, lo2)
+    
+    def distance(self,lat1, lon1, lat2, lon2):
+        r = 6731  
+        p = pi / 180
+        a = 0.5 - cos((lat2 - lat1) * p) / 2 + cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2
+        return 2 * r * asin(sqrt(a))
 
     def get_U2(self, u_name):
+        nodes=self.nodes
         if u_name in self.hU:
             return self.hU[u_name]
         if not os.path.isfile(self.fpath+u_name):
-            #print('no this U : %s'%(self.fpath+u_name))
             print(u_name)
             return {}
-        with open(self.subpath + u_name, 'rb') as f:
+        with open(self.fpath + u_name, 'rb') as f:
             content = f.read()
             fn = gzip.decompress(content).decode()
-        # fn = open(self.fpath + u_name)
         U = {}
-        for line in fn:
+        j=0
+        fn=fn.split('\n')
+        for line in fn[:-1]:
             line = line.strip().split(';')
-            U[line[0]] = np.zeros(self.eta)
-            if line[1] == '-1' and line[2] == '-1':
-                pass
-            elif line[1] == '-1' and line[2] == '0':
-                U[line[0]] = np.ones(self.eta)
+            U[nodes[j]] = np.zeros(self.eta)
+            if line[0] == '0':
+                U[nodes[j]] = np.ones(self.eta)
+            elif len(line)==1:
+                for i in range(int(line[0]),self.eta):
+                    U[nodes[j]][i] = 1.0
+            elif line[1]=='':
+                for i in range(int(line[0]),self.eta):
+                    U[nodes[j]][i] = 1.0
             else:
-                for i in range(int(line[1])+1, int(line[2])):
-                    t = 3 + i - int(line[1]) - 1
-                    U[line[0]][i] = float(line[t])
-                for i in range(int(line[2]), self.eta):
-                    U[line[0]][i] = 1.0
-        # fn.close()
+                for i in range(int(line[0]), int(line[0])+len(line)-1):
+                    U[nodes[j]][i] = float(line[i-int(line[0])+1])
+                for i in range(int(line[0])+len(line), self.eta):
+                    U[nodes[j]][i] = 1.0
+            j+=1
         self.hU[u_name] = U
         return U
 
     def get_dict(self, ):
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        # with open(self.subpath+self.fedge_desty) as js_file:
-        #     edge_desty = json.load(js_file)
-        #     edge_desty = dict(sorted(edge_desty.items(), key=operator.itemgetter(0)))
         with open(self.subpath + self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -128,7 +136,6 @@ class Rout():
                 cost = min(float(l) for l in cost1)
                 All_edges.append((edge_[0], edge_[1], cost))
         for edge in edge_desty:
-            #edge_ = edge.split('-')
             if edge not in speed_dict:
                 print(edge)
         G2 = nx.DiGraph()
@@ -139,7 +146,6 @@ class Rout():
         for pairs in r_pairs:
             for pair in pairs:
                 stedge = pair[-2] + '-' + pair[-1]
-                #print(stedge)
                 temp_edges.add(stedge)
                 temp_nodes.add(pair[-2])
                 temp_nodes.add(pair[-1])
@@ -148,7 +154,6 @@ class Rout():
         for edge in vedge_desty:
             if edge not in edge_desty and edge not in speed_dict:
                 if edge in temp_edges: 
-                    #print('del %s '%edge)
                     continue
                 edge_ = edge.split('-')
                 if np.random.rand() > 0.5: continue
@@ -170,6 +175,7 @@ class Rout():
         G = nx.DiGraph()
         G.add_nodes_from(all_nodes)
         G.add_weighted_edges_from(All_edges)
+        self.nodes=all_nodes
         return all_edges, all_nodes, G, G2, speed_dict
  
     def conv(self, A, B):
@@ -202,7 +208,6 @@ class Rout():
             (v, d) = Que.popitem()
             D[v] = d
             U.remove(v)
-            #if v == target: break
             neigh = list(Gk.successors(v))
             for u in neigh:
                 if u in U:
@@ -324,23 +329,20 @@ class Rout():
                     flag = True
                     break
                 if u in has_visit: 
-                    #print('u1 %s'%u)
+
                     continue
                 else: has_visit.add(u)
                 if u in p_hat: 
-                    #print('u2 %s'%u)
                     continue
                 vu = v_l + '-' + u
                 w_vu = get_weight(vu)
                 if len(w_vu) == 0:
-                    #print('vu %s'%vu)
                     continue
                 cost_vu = min([float(l) for l in w_vu.keys()])
                 p_order = nodes_order[u] #p_hat]
                 tcost1 = time.time()
                 inx_min = np.argwhere(U[u] > 0)
                 if len(inx_min) == 0 : 
-                    #print('inx vu %s'%vu)
                     continue
                 inx_min = inx_min[0][0]
                 all_expire += time.time() - tcost1
@@ -386,7 +388,7 @@ class Rout():
         one_dis = -1
         stores = {}
         cate = ['0-5km', '5-10km', '10-25km', '25-35km']
-        for pairs in r_pairs:
+        for pairs in r_pairs[1:]:
             one_dis += 1
             print('distance category %s'%cate[one_dis])
             for pair_ in pairs:
@@ -402,6 +404,8 @@ class Rout():
                 pred = self.get_dijkstra3(G, desti)
                 path_, st1 = [start], start
                 distan2 = 0
+                if start not in pred:
+                    continue
                 while st1 != desti:
                     st2 = st1
                     st1 = pred[st1]
@@ -452,12 +456,20 @@ class Rout():
                     if t_b_ == 2:
                         sums2 += 1
                         cost_t2 += tend - tstart 
+            print(One_Plot)
+            print(One_Plot2 )
+            print(One_Sums)
         for i in range(PT):
             if sums[i] == 0:
                 continue
             plot_data1[i] /= sums[i]
-        One_Plot = One_Plot / One_Sums 
-        One_Plot2 = One_Plot2 / One_Sums 
+        # One_Plot = One_Plot / One_Sums 
+        # One_Plot2 = One_Plot2 / One_Sums 
+        for i in range(len(One_Plot2)):
+            for j in range(len(One_Plot2[0])):
+                if One_Sums[i][j]!=0:
+                    One_Plot2[i][j] = One_Plot2[i][j] / One_Sums[i][j]
+                    One_Plot[i][j] = One_Plot[i][j] / One_Sums[i][j]
         One_Plot = np.nan_to_num(One_Plot)
         One_Plot2 = np.nan_to_num(One_Plot2)
         print('The success account')
@@ -469,10 +481,21 @@ class Rout():
         print('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km')
         print(One_Plot2.mean(1))
 
+        with(open(subpath+"V-BS-result.txt", 'a+')) as fw:
+            fw.write(str(sigma)+'\n')
+            fw.write('The success account\n')
+            fw.write(";".join(map(str,list(One_Sums)))+'\n')
+            fw.write('The time cost for routing\n')
+            fw.write(";".join(map(str,list(One_Plot2)))+'\n')
+            fw.write('Time cost for budget: 50%, 75%, 100%, 125%, 150%\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(0))))+'\n')
+            fw.write('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(1))))+'\n')
+
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser(description='T-BS')
-        parser.add_argument('--sig', default=5, type=int)
+        parser.add_argument('--sig', default=2, type=int)
         args = parser.parse_args()
         if args.sig == 0:
             sigma, eta = 10, 800
@@ -492,15 +515,29 @@ if __name__ == '__main__':
 
         threads_num = 10
         dinx = 50
-
-        subpath = '../data/res%d/' % dinx
-        # fpath_desty = 'KKdesty_num_%d.json' % threads_num  # 'new_path_desty1.json'
-        # fedge_desty = 'M_edge_desty.json'
+        city='aal'
+        dataset='peak'
+        flag=1
+        if city=='aal':
+            filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+            subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/AAL_NGR'
+            axes_file = '../data/aal_vertices.txt'
+            query_name = "../data/queries.txt"
+        elif city=='cd':
+            filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/full_NGR'
+            axes_file = '../data/cd_vertices.txt'
+            query_name = "../data/cd_queries.txt"
+        else:
+            filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/xa/XIAN_R_new.txt'
+            axes_file = '../data/xa/xa_vertices.txt'
+            query_name = "../data/xa/xa_new_queries.txt"
         fpath_desty = 'KKdesty_num_%d.txt' % threads_num  # 'new_path_desty1.json'
         fedge_desty = 'M_edge_desty.txt'
-        axes_file = '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
         fpath =  subpath + 'u_mul_matrix_sig%d/'%sigma
 
         time_budget = 5000

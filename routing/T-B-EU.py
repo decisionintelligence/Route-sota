@@ -13,6 +13,8 @@ import copy
 from math import sin, cos, sqrt, atan2, radians
 import argparse
 import gzip
+import math
+from math import cos, asin, sqrt, pi
 
 from v_opt import VOpt
 
@@ -31,6 +33,7 @@ class Rout():
         self.speed_file = speed_file
         self.speed = 50
         self.query_name = query_name
+        self.nodes={}
     
 
     def get_axes(self, ):
@@ -51,15 +54,9 @@ class Rout():
         R = 6373.0
         distance = R * c
         return distance
-        #return geodesic((lo1, la1), (lo2, la2)).kilometers
 
 
     def get_dict(self, ):
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        # with open(self.subpath+self.fedge_desty) as js_file:
-        #     edge_desty = json.load(js_file)
-        #     edge_desty = dict(sorted(edge_desty.items(), key=operator.itemgetter(0)))
         with open(self.subpath+self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -108,7 +105,7 @@ class Rout():
         G2 = nx.DiGraph()
         G2.add_nodes_from(all_nodes)
         G2.add_weighted_edges_from(All_edges)
-
+        self.nodes=all_nodes
         return all_edges, all_nodes, G2, speed_dict
 
     def conv(self, A, B):
@@ -264,7 +261,7 @@ class Rout():
                     p_best_p = p_hat + ';' + vu
                     p_w_p = self.conv(w_p_hat, w_vu)
                     p_max_m = max(list(p_w_p.values()))
-                    p_best_cost = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                    p_best_cost = cost_sv + cost_vu + vi_getmin
                     flag = True
                     break
                 if u in has_visit: 
@@ -284,7 +281,7 @@ class Rout():
                 start1 = time.time() 
                 vi_getmin = self.get_distance(points, (u, desti)) / self.speed * 3600
                 self.all_expire += time.time() - start1
-                cost_time = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                cost_time = cost_sv + cost_vu + vi_getmin
                 if cost_time <= self.T:
                     p_hat_p = p_hat + ';' + vu
                     w_p_hat_p = self.conv(w_p_hat, w_vu)
@@ -340,9 +337,14 @@ class Rout():
                 distan2 = 0
                 while st1 != desti:
                     st2 = st1
+                    if st1 not in pred:
+                        distan2=-1
+                        break
                     st1 = pred[st1]
                     path_.append(st1)
                     distan2 += self.get_distance(points, (st2, st1))
+                if distan2==-1:
+                    continue
                 distan = self.get_distance(points, (start, desti))
                 st_key = start + '+' + desti + ':'+str(distan)+':'+str(distan2)
                 stores[st_key] = {}
@@ -388,22 +390,38 @@ class Rout():
                 continue
             plot_data1[i] /= sums[i]
 
+
+        for i in range(len(One_Plot2)):
+            for j in range(len(One_Plot2[0])):
+                if One_Sums[i][j]!=0:
+                    One_Plot2[i][j] = One_Plot2[i][j] / One_Sums[i][j]
+                    One_Plot[i][j] = One_Plot[i][j] / One_Sums[i][j]
+        One_Plot = np.nan_to_num(One_Plot)
+        One_Plot2 = np.nan_to_num(One_Plot2)
         print('The success account')
         print(One_Sums)
-        One_Plot = One_Plot / One_Sums 
-        One_Plot2 = One_Plot2 / One_Sums 
-        One_Plot = np.nan_to_num(One_Plot)
         print('The time cost for routing')
-        print(One_Plot)
+        print(One_Plot2)
         print('Time cost for budget: 50%, 75%, 100%, 125%, 150%')
-        print(One_Plot.mean(0))
+        print(One_Plot2.mean(0))
         print('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km')
-        print(One_Plot.mean(1))
+        print(One_Plot2.mean(1))
+
+        with(open(subpath+"T-B-EU-result.txt", 'a+')) as fw:
+            fw.write(str(sigma)+'\n')
+            fw.write('The success account\n')
+            fw.write(";".join(map(str,list(One_Sums)))+'\n')
+            fw.write('The time cost for routing\n')
+            fw.write(";".join(map(str,list(One_Plot2)))+'\n')
+            fw.write('Time cost for budget: 50%, 75%, 100%, 125%, 150%\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(0))))+'\n')
+            fw.write('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(1))))+'\n')
 
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser(description='T-B-EU')
-        parser.add_argument('--sig', default=0, type=int)
+        parser.add_argument('--sig', default=2, type=int)
         args = parser.parse_args()
         if args.sig == 0:
             sigma, eta = 10, 800
@@ -419,16 +437,30 @@ if __name__ == '__main__':
 
         threads_num = 10
         dinx = 50
+        city='xa'
+        dataset='peak'
+        flag=1
+        if city=='aal':
+            filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+            subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/AAL_NGR'
+            axes_file = '../data/aal_vertices.txt'
+            query_name = "../data/queries.txt"
+        elif city=='cd':
+            filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/full_NGR'
+            axes_file = '../data/cd_vertices.txt'
+            query_name = "../data/cd_queries.txt"
+        else:
+            filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/xa/XIAN_R_new.txt'
+            axes_file = '../data/xa/xa_vertices.txt'
+            query_name = "../data/xa/xa_new_queries.txt"
 
-        # subpath = '../data/res%d/'%dinx
-        subpath = '../data/peak_res%d/'%dinx
-        # fpath_desty = 'KKdesty_num_%d.json'%threads_num #'new_path_desty1.json'
-        # fedge_desty = 'M_edge_desty.json'
         fpath_desty = 'KKdesty_num_%d.txt' % threads_num  # 'new_path_desty1.json'
         fedge_desty = 'M_edge_desty.txt'
-        axes_file =  '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
     
         parser = argparse.ArgumentParser(description='T-B-EU')
         parser.add_argument('--tm', type=str, default='peak')

@@ -15,6 +15,8 @@ import copy
 import argparse
 import gzip
 from v_opt import VOpt
+import math
+from math import cos, asin, sqrt, pi
 
 class Modified():
 
@@ -33,12 +35,11 @@ class Modified():
         self.true_path = true_path
         self.speed = 50
         self.query_name = query_name
+        self.nodes={}
     
    
     def add_tpath(self,):
         os.makedirs(os.path.dirname(self.subpath + self.true_path), exist_ok=True)
-        # with open(self.subpath + self.true_path) as fn:
-        #     gt_path_ = json.load(fn)
         with open(self.subpath + self.true_path, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -57,7 +58,6 @@ class Modified():
                 gt_path[gt_key] = [str(gt), gt_path_[gt], lens1, nw_key[0], a1, b1]
             else:
                 ex_path = gt_path[gt_key]
-                #lens2 = len(ex_path[0].split(';'))
                 mins  = min(len(ex_path[1]), len(gt_path_[gt]))
                 ex_key = list(ex_path[1].keys())
                 ex_value = list(ex_path[1].values())
@@ -91,7 +91,7 @@ class Modified():
     def get_distance(self, points, point):
         (la1, lo1) = points[point[0]]
         (la2, lo2) = points[point[1]]
-        return geodesic((lo1, la1), (lo2, la2)).kilometers
+        return geodesic((la1, lo1), (la2, lo2)).kilometers
 
 
     def get_dict(self, ):
@@ -99,11 +99,6 @@ class Modified():
         os.makedirs(os.path.dirname(path), exist_ok=True)
         path = self.subpath+self.fedge_desty
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        # with open(self.subpath+self.fedge_desty) as js_file:
-        #     edge_desty = json.load(js_file)
-        #     edge_desty = dict(sorted(edge_desty.items(), key=operator.itemgetter(0)))
         with open(self.subpath + self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -164,7 +159,6 @@ class Modified():
                 temp_nodes.add(pair[-1])
 
         for gt_ in gt_path:
-            #edges.append((gt_path[gt_][-2], gt_path[gt_][-1], abs(float(gt_path[gt_][3]))))
             All_edges.append((gt_path[gt_][-2], gt_path[gt_][-1], abs(float(gt_path[gt_][3]))))
             All_edges.append((gt_path[gt_][-1], gt_path[gt_][-2], abs(float(gt_path[gt_][3]))))
             temp_edge = gt_path[gt_][-2] + '-' + gt_path[gt_][-1]
@@ -184,14 +178,9 @@ class Modified():
         vedge_desty.update(vedge_desty_)
         for edge in vedge_desty:
             if edge not in edge_desty and edge not in speed_dict:
-                #if edge in temp_edges: 
-                #    print('del %s '%edge)
-                #    continue
                 edge_ = edge.split('-')
                 cost1 = vedge_desty[edge].keys()
                 cost = min(float(l) for l in cost1)
-                #distan = self.get_distance(points, (edge_[0], edge_[1]))
-                #if distan > 17: continue 
                 All_edges.append((edge_[0], edge_[1], cost))
                 all_edges.add(edge)
         all_edges = list(all_edges)
@@ -202,7 +191,7 @@ class Modified():
         for edge in speed_dict:
             if edge not in edge_desty:
                 edge_desty[edge] = speed_dict[edge]
-
+        self.nodes=all_nodes
         return all_edges, all_nodes, G, G2, speed_dict
 
     def conv(self, A, B):
@@ -265,7 +254,6 @@ class Modified():
 
     def rout(self, start, desti, edge_desty, vedge_desty, nodes_order, U, G, G2, points, gt_path, gt_path_, pred):
         Q, P_hat = [], []
-        #neigh = list(G2.successors(start))
         neigh = list(G.successors(start))
         start_ax = points[start]
         desti_ax = points[desti]
@@ -280,7 +268,6 @@ class Modified():
                 w_p_hat = gt_path[p_hat][1]
             elif p_hat in vedge_desty:
                 w_p_hat = vedge_desty[p_hat]
-                #print('vedge %s' %p_hat)
             else:
                 print('other %s' %p_hat)
             if len(w_p_hat) == 0:
@@ -302,6 +289,9 @@ class Modified():
             v = vv 
             path_ = [v]
             while v != desti:
+                if v not in pred:
+                    expire_time = time.time()-start2
+                    return -1,expire_time
                 v = pred[v]#[2]
                 path_.append(v)
             paths_ = []
@@ -327,8 +317,6 @@ class Modified():
                         iters = 1
                         break
             if not flag: 
-                #l = 1
-                #s = len(path_)
                 s, l = 0, len(path_)
             else:
                 if iters == 0:
@@ -361,6 +349,8 @@ class Modified():
             w_min = min([float(l) for l in w_p_hat.keys()])
             p_order = nodes_order[vi] #p_hat]
             vi_getmin, ex_p = get_vigetmin2(vi)
+            if vi_getmin==-1:
+                break
             all_expire2 += ex_p
             cost_time = w_min + vi_getmin
             if cost_time <= self.T:
@@ -386,7 +376,6 @@ class Modified():
                 p_w_p = w_p_hat
                 flag = True
                 break
-            #neigh = list(G2.successors(v_l))
             neigh = list(G.successors(v_l))
             if len(w_p_hat.keys()) == 0:
                 print(w_p_hat)
@@ -404,7 +393,7 @@ class Modified():
                     p_best_p = p_hat + ';' + vu
                     p_w_p = self.conv(w_p_hat, w_vu)
                     p_max_m = get_maxP3(w_p_hat, u, vi_getmin)
-                    p_best_cost = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                    p_best_cost = cost_sv + cost_vu + vi_getmin
                     flag = True
                     break
                 if u in has_visit: 
@@ -422,7 +411,7 @@ class Modified():
                 cost_vu = min([float(l) for l in w_vu.keys()])
                 vi_getmin, ex_p = get_vigetmin2(u)
                 all_expire2 += ex_p
-                cost_time = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                cost_time = cost_sv + cost_vu + vi_getmin
                 if cost_time <= self.T:
                     p_hat_p = p_hat + ';' + vu
                     w_p_hat_p = self.conv(w_p_hat, w_vu)
@@ -451,7 +440,6 @@ class Modified():
             (v, d) = Que.popitem()
             D[v] = d
             U.remove(v)
-            #if v == target: break
             neigh = list(Gk.successors(v))
             for u in neigh:
                 if u in U:
@@ -472,7 +460,6 @@ class Modified():
         points = self.get_axes()
 
         edges, nodes, G, G2, speed_dict = self.get_graph2(edge_desty, gt_path, vedge_desty, r_pairs, points)
-        #print('len of nodes and edges: %d %d'%(len(nodes), len(edges)))
         nodes_order, i = {}, 0
         for node in nodes:
             nodes_order[node] = i
@@ -498,6 +485,7 @@ class Modified():
             all_expires = 0.0
             mps, mps2 = 0.0, 0.0
             cost_t, cost_t2 = 0, 0
+            
             for pair_ in pairs:
                 #print(pair_)
                 print('o-d pair: %s'%pair_[0]+'-'+pair_[1])
@@ -508,9 +496,15 @@ class Modified():
                 U = ''
                 pred = self.get_dijkstra3(G, desti)
                 path_, st1 = [start], start
+                distan2 = 0
                 while st1 != desti:
+                    if st1 not in pred:
+                        distan2=-1
+                        break
                     st1 = pred[st1]
                     path_.append(st1)
+                if distan2==-1:
+                    continue
                 st1, time_budget = start, 0.0
                 for st2 in path_[1:]:
                     sedge = st1+'-'+st2
@@ -550,15 +544,20 @@ class Modified():
                         cost_t += tend - tstart 
                         cost_t2 += tend - tstart - all_expire
                         sums2 += 1
+            print(One_Plot)
+            print(One_Plot2 )
+            print(One_Sums)
         for i in range(PT):
             if sums[i] == 0:
                 print('zero %d'%i)
                 continue
             plot_data1[i] /= sums[i]
             plot_data2[i] /= sums[i]
-
-        One_Plot = One_Plot / One_Sums 
-        One_Plot2 = One_Plot2 / One_Sums 
+        for i in range(len(One_Plot2)):
+            for j in range(len(One_Plot2[0])):
+                if One_Sums[i][j]!=0:
+                    One_Plot2[i][j] = One_Plot2[i][j] / One_Sums[i][j]
+                    One_Plot[i][j] = One_Plot[i][j] / One_Sums[i][j]
         One_Plot = np.nan_to_num(One_Plot)
         One_Plot2 = np.nan_to_num(One_Plot2)
         print('The success account')
@@ -569,12 +568,24 @@ class Modified():
         print(One_Plot2.mean(0))
         print('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km')
         print(One_Plot2.mean(1))
+
+        with(open(subpath+"V-B-P-result.txt", 'a+')) as fw:
+            fw.write(str(sigma)+'\n')
+            fw.write('The success account\n')
+            fw.write(";".join(map(str,list(One_Sums)))+'\n')
+            fw.write('The time cost for routing\n')
+            fw.write(";".join(map(str,list(One_Plot2)))+'\n')
+            fw.write('Time cost for budget: 50%, 75%, 100%, 125%, 150%\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(0))))+'\n')
+            fw.write('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(1))))+'\n')
+
    
 if __name__ == '__main__':
     try:
 
         parser = argparse.ArgumentParser(description='T-BS')
-        parser.add_argument('--sig', default=0, type=int)
+        parser.add_argument('--sig', default=2, type=int)
         args = parser.parse_args()
         if args.sig == 0:
             sigma, eta = 10, 800
@@ -587,20 +598,35 @@ if __name__ == '__main__':
         else:
             print('wrong sig , exit')
             sys.exit()
-
+        
         threads_num = 10
         dinx = 50
+        city='xa'
+        dataset='peak'
+        flag=1
+        if city=='aal':
+            filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+            subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/AAL_NGR'
+            axes_file = '../data/aal_vertices.txt'
+            query_name = "../data/queries.txt"
+        elif city=='cd':
+            filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/full_NGR'
+            axes_file = '../data/cd_vertices.txt'
+            query_name = "../data/cd_queries.txt"
+        else:
+            filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/xa/XIAN_R_new.txt'
+            axes_file = '../data/xa/xa_vertices.txt'
+            query_name = "../data/xa/xa_new_queries.txt"
 
-        subpath = '../data/res%d/' % dinx
-        # true_path = 'path_desty%d.json' % dinx
-        # fpath_desty = 'KKdesty_num_%d.json' % threads_num  # 'new_path_desty1.json'
-        # fedge_desty = 'M_edge_desty.json'
         true_path = 'path_desty%d.txt' % dinx
         fpath_desty = 'KKdesty_num_%d.txt' % threads_num  # 'new_path_desty1.json'
         fedge_desty = 'M_edge_desty.txt'
-        axes_file = '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
+
 
         time_budget = 5000
         rout = Modified(time_budget, fpath_desty, fedge_desty, subpath, axes_file, speed_file, true_path, query_name, sigma)

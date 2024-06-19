@@ -50,11 +50,6 @@ class PaceRout():
         return geodesic((lo1, la1), (lo2, la2)).kilometers
 
     def get_dict(self, ):
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        # with open(self.subpath+self.fedge_desty) as js_file:
-        #     edge_desty = json.load(js_file)
-        #     edge_desty = dict(sorted(edge_desty.items(), key=operator.itemgetter(0)))
         with open(self.subpath + self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -99,7 +94,6 @@ class PaceRout():
                 cost = min(float(l) for l in cost1)
                 All_edges.append((edge_[0], edge_[1], cost))
         for edge in edge_desty:
-            #edge_ = edge.split('-')
             if edge not in speed_dict:
                 print(edge)
         G2 = nx.DiGraph()
@@ -115,20 +109,11 @@ class PaceRout():
 
         for edge in vedge_desty:
             if edge not in edge_desty and edge not in speed_dict:
-                #if edge in temp_edges: 
-                #    print('del %s '%edge)
-                #    continue
                 edge_ = edge.split('-')
                 cost1 = vedge_desty[edge].keys()
                 cost = min(float(l) for l in cost1)
-                #distan = self.get_distance(points, (edge_[0], edge_[1]))
-                #print(distan)
-                #if distan > 17: continue 
                 All_edges.append((edge_[0], edge_[1], cost))
                 all_edges.add(edge)
-        #for edge in temp_edges:
-        #    if edge in vedge_desty:
-        #        del vedge_desty[edge]
         print('len of vedge_desty 2: %d'%len(vedge_desty))
         all_nodes, all_edges = list(all_nodes), list(all_edges)
         G = nx.DiGraph()
@@ -160,7 +145,6 @@ class PaceRout():
                 for m in range(M):
                     n_k = int(wk1[n]) + int(wk2[j]) - int(wk3[m])
                     if n_k < 0: continue
-                    #else: n_k = str(n_k)
                     if n_k in DD:
                         DD[n_k] += float(prob1[wk1[n]]) * float(prob2[wk2[j]]) / float(edge_w[wk3[m]])
                     else:
@@ -296,13 +280,10 @@ class PaceRout():
         nodes = Gk.nodes
         UU = set(nodes)
         while UU:
-            #print('len U %d'%len(U))
-            #print('len Q %d'%len(Que))
             if len(Que) == 0: break
             (v, d) = Que.popitem()
             D[v] = d
             UU.remove(v)
-            #if v == target: break
             neigh = list(Gk.successors(v))
             for u in neigh:
                 if u in UU:
@@ -319,7 +300,6 @@ class PaceRout():
         if not os.path.isfile(self.fpath+u_name):
             print(u_name)
             return {}
-        # fn = open(self.fpath + u_name)
         with open(self.subpath + u_name, 'rb') as f:
             content = f.read()
             fn = gzip.decompress(content).decode()
@@ -337,7 +317,6 @@ class PaceRout():
                     U[line[0]][i] = float(line[t])
                 for i in range(int(line[2]), self.eta):
                     U[line[0]][i] = 1.0
-        # fn.close()
         self.hU[u_name] = U
         return U
 
@@ -449,7 +428,7 @@ if __name__ == '__main__':
     try:
 
         parser = argparse.ArgumentParser(description='T-BS')
-        parser.add_argument('--sig', default=0, type=int)
+        parser.add_argument('--sig', default=2, type=int)
         args = parser.parse_args()
         if args.sig == 0:
             sigma, eta = 10, 800
@@ -459,28 +438,43 @@ if __name__ == '__main__':
             sigma, eta = 60, 170
         elif args.sig == 3:
             sigma, eta = 90, 111
+        elif args.sig == 4:
+            sigma, eta = 120, 80
+        elif args.sig == 5:
+            sigma, eta = 240, 33
         else:
             print('wrong sig , exit')
             sys.exit()
 
-        threads_num = 10
         dinx = 50
-
-        subpath = '../data/res%d/' % dinx
-        # true_path = 'path_desty%d.json' % dinx
-        # fpath_desty = 'KKdesty_num_%d.json' % threads_num  # 'new_path_desty1.json'
-        # fedge_desty = 'M_edge_desty.json'
-        true_path = 'path_desty%d.txt' % dinx
+        threads_num = 10
+        city='aal'
+        dataset='peak'
+        flag=1
+        if city=='aal':
+            filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+            subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/AAL_NGR'
+            axes_file = '../data/aal_vertices.txt'
+            query_name = "../data/queries.txt"
+        elif city=='cd':
+            filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/full_NGR'
+            axes_file = '../data/cd_vertices.txt'
+            query_name = "../data/cd_queries.txt"
+        else:
+            filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/xa/XIAN_R_new.txt'
+            axes_file = '../data/xa/xa_vertices.txt'
+            query_name = "../data/xa/xa_new_queries.txt"
         fpath_desty = 'KKdesty_num_%d.txt' % threads_num  # 'new_path_desty1.json'
         fedge_desty = 'M_edge_desty.txt'
-        axes_file = '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
         fpath =  subpath + 'u_mul_matrix_sig%d/'%sigma
-
+        true_path = 'path_desty%d.txt' % dinx
 
         time_budget = 5000
-
         pace_rout = PaceRout(fpath, time_budget, fpath_desty, fedge_desty, subpath, axes_file, speed_file, true_path, sigma, eta, query_name)
         pace_rout.main()
         print("finished")

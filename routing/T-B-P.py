@@ -15,6 +15,8 @@ import copy
 import argparse
 import gzip
 from v_opt import VOpt
+import math
+from math import cos, asin, sqrt, pi
 
 class Modified():
 
@@ -34,11 +36,10 @@ class Modified():
         self.true_path = true_path
         self.speed = 50
         self.query_name = query_name
+        self.nodes={}
     
    
     def add_tpath(self,):
-        # with open(self.subpath + self.true_path) as fn:
-        #     gt_path_ = json.load(fn)
 
         with open(self.subpath + self.true_path, 'rb') as f:
             content = f.read()
@@ -59,7 +60,6 @@ class Modified():
             else:
                 try:
                     ex_path = gt_path[gt_key]
-                    #lens2 = len(ex_path[0].split(';'))
                     mins  = min(len(ex_path[1]), len(gt_path_[gt]))
                     ex_path_dic = {}
                     for i in range(0, len(ex_path)):
@@ -96,15 +96,10 @@ class Modified():
     def get_distance(self, points, point):
         (la1, lo1) = points[point[0]]
         (la2, lo2) = points[point[1]]
-        return geodesic((lo1, la1), (lo2, la2)).kilometers
+        return geodesic((la1, lo1), (la2, lo2)).kilometers
 
 
     def get_dict(self, ):
-        # with open(self.subpath+self.fpath_desty) as js_file:
-        #     path_desty = json.load(js_file)
-        # with open(self.subpath+self.fedge_desty) as js_file:
-        #     edge_desty = json.load(js_file)
-        #     edge_desty = dict(sorted(edge_desty.items(), key=operator.itemgetter(0)))
         with open(self.subpath+self.fpath_desty, 'rb') as f:
             content = f.read()
             a = gzip.decompress(content).decode()
@@ -153,7 +148,6 @@ class Modified():
         G2.add_weighted_edges_from(All_edges)
 
         for gt_ in gt_path:
-            #edges.append((gt_path[gt_][-2], gt_path[gt_][-1], abs(float(gt_path[gt_][3]))))
             All_edges.append((gt_path[gt_][-2], gt_path[gt_][-1], abs(float(gt_path[gt_][3]))))
             All_edges.append((gt_path[gt_][-1], gt_path[gt_][-2], abs(float(gt_path[gt_][3]))))
             temp_edge = gt_path[gt_][-2] + '-' + gt_path[gt_][-1]
@@ -169,6 +163,8 @@ class Modified():
         for edge in speed_dict:
             if edge not in edge_desty:
                 edge_desty[edge] = speed_dict[edge]
+        self.speed_dict = speed_dict
+        self.nodes=all_nodes
         return all_edges, all_nodes, G, G2, speed_dict
  
     def conv(self, A, B):
@@ -242,7 +238,6 @@ class Modified():
             (v, d) = Que.popitem()
             D[v] = d
             U.remove(v)
-            #if v == target: break
             neigh = list(Gk.successors(v))
             for u in neigh:
                 if u in U:
@@ -291,6 +286,10 @@ class Modified():
             v = vv 
             path_ = [v]
             while v != desti:
+                if v not in pred:
+                    expire_time = time.time()-start1
+                    return -1,expire_time
+                    break
                 v = pred[v]#[2]
                 path_.append(v)
             paths_ = []
@@ -322,12 +321,15 @@ class Modified():
             w_min = min([float(l) for l in w_p_hat.keys()])
             p_order = nodes_order[vi] #p_hat]
             vi_getmin, ex_p = get_vigetmin2(vi)
+            if vi_getmin==-1:
+                break
             all_expire += ex_p
             cost_time = w_min + vi_getmin
             if cost_time <= self.T:
                 p_max = max(list(w_p_hat.values()))
                 Que[p_hat] = p_max
                 Q[p_hat] = (p_max, w_p_hat, cost_time)
+
         print('len Q %d'%len(Q))
         QQ = {}
         p_best_p, flag = 'none', False
@@ -365,7 +367,7 @@ class Modified():
                     p_best_p = p_hat + ';' + vu
                     p_w_p = self.conv(w_p_hat, w_vu)
                     p_max_m = max(list(p_w_p.values()))
-                    p_best_cost = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                    p_best_cost = cost_sv + cost_vu + vi_getmin
                     flag = True
                     break
                 if u in has_visit: 
@@ -384,7 +386,7 @@ class Modified():
                 p_order = nodes_order[u] #p_hat]
                 vi_getmin, ex_p = get_vigetmin2(u)
                 all_expire += ex_p
-                cost_time = cost_sv + cost_vu + vi_getmin#inx_min*self.sigma
+                cost_time = cost_sv + cost_vu + vi_getmin
                 if cost_time <= self.T:
                     p_hat_p = p_hat + ';' + vu
                     w_p_hat_p = self.conv(w_p_hat, w_vu)
@@ -441,10 +443,16 @@ class Modified():
                 start, desti = pair_[-2], pair_[-1]
                 pred2 = self.get_modified_one_to_all3(G, desti)
                 path_2 , st1 = [start], start
+                distan2 = 0
                 while st1 != desti:
                     st2 = st1 
+                    if st1 not in pred2:
+                        distan2=-1
+                        break
                     st1 = pred2[st1]#[2]
                     path_2.append(st1)
+                if distan2==-1:
+                    continue
                 at = 0
                 for st2 in path_2[1:]:
                     sedge = st1 + '-' + st2
@@ -456,14 +464,19 @@ class Modified():
                 distan2 = 0
                 while st1 != desti:
                     st2 = st1
+                    if st1 not in pred:
+                        distan2=-1
+                        break
                     st1 = pred[st1]
                     path_.append(st1)
                     distan2 += self.get_distance(points, (st2, st1))
+                if distan2==-1:
+                    continue
                 distan = self.get_distance(points, (start, desti))
                 st_key = start + '+' + desti + ':'+str(distan)+':'+str(distan2)+':'+str(len(pred2))+':'+str(at)
                 stores[st_key] = {}
                 st1, time_budget = start, 0.0
-                print(path_)
+                # print(path_)
                 for st2 in path_[1:]:
                     sedge = st1+'-'+st2
                     if sedge in edge_desty:
@@ -500,14 +513,20 @@ class Modified():
                         sums2 += 1
                         cost_t1 += tend - tstart
                         cost_t2 += tend - tstart - all_expire
+            print(One_Plot)
+            print(One_Plot2 )
+            print(One_Sums)
         for i in range(5):
             if sums[i] == 0:
                 #print('zero %d'%i)
                 continue
             plot_data1[i] /= sums[i]
             plot_data2[i] /= sums[i]
-        One_Plot = One_Plot / One_Sums 
-        One_Plot2 = One_Plot2 / One_Sums 
+        for i in range(len(One_Plot2)):
+            for j in range(len(One_Plot2[0])):
+                if One_Sums[i][j]!=0:
+                    One_Plot2[i][j] = One_Plot2[i][j] / One_Sums[i][j]
+                    One_Plot[i][j] = One_Plot[i][j] / One_Sums[i][j]
         One_Plot = np.nan_to_num(One_Plot)
         One_Plot2 = np.nan_to_num(One_Plot2)
         print('The success account')
@@ -519,10 +538,21 @@ class Modified():
         print('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km')
         print(One_Plot2.mean(1))
 
+        with(open(subpath+"T-B-P-result.txt", 'a+')) as fw:
+            fw.write(str(sigma)+'\n')
+            fw.write('The success account\n')
+            fw.write(";".join(map(str,list(One_Sums)))+'\n')
+            fw.write('The time cost for routing\n')
+            fw.write(";".join(map(str,list(One_Plot2)))+'\n')
+            fw.write('Time cost for budget: 50%, 75%, 100%, 125%, 150%\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(0))))+'\n')
+            fw.write('Time cost for distance: 0-5km, 5-10km, 10-25km, 25-35km\n')
+            fw.write(";".join(map(str,list(One_Plot2.mean(1))))+'\n')
+
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser(description='T-B-P')
-        parser.add_argument('--sig', default=0, type=int)
+        parser.add_argument('--sig', default=2, type=int)
         args = parser.parse_args()
         if args.sig == 0:
             sigma, eta = 10, 800
@@ -532,37 +562,43 @@ if __name__ == '__main__':
             sigma, eta = 60, 170
         elif args.sig == 3:
             sigma, eta = 90, 111
+        elif args.sig == 4:
+            sigma, eta = 120, 80
+        elif args.sig == 5:
+            sigma, eta = 240, 33
         else:
             print('wrong sig , exit')
             sys.exit()
 
-        # threads_num = 20
-        # dinx = 30
         threads_num = 10
         dinx = 50
+        city='xa'
+        dataset='peak'
+        flag=1
+        if city=='aal':
+            filename = "../data/aal/trips_real_"+str(dinx)+"_"+dataset+'.csv'
+            subpath = '../data/'+dataset+'_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/AAL_NGR'
+            axes_file = '../data/aal_vertices.txt'
+            query_name = "../data/queries.txt"
+        elif city=='cd':
+            filename = '../data/cd/trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_cd_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/full_NGR'
+            axes_file = '../data/cd_vertices.txt'
+            query_name = "../data/cd_queries.txt"
+        else:
+            filename = '../data/xa/new_days_trips_real_'+str(dinx)+'_'+dataset+'.csv'
+            subpath = '../data/'+dataset+'_xa_res%d' % dinx+'_%d/' %flag
+            speed_file = '../data/xa/XIAN_R_new.txt'
+            axes_file = '../data/xa/xa_vertices.txt'
+            query_name = "../data/xa/xa_new_queries.txt"
 
-        subpath = '../data/res%d/'%dinx
-        # true_path = 'path_desty%d.json'%dinx
-        # fpath_desty = 'KKdesty_num_%d.json'%threads_num #'new_path_desty1.json'
-        # fedge_desty = 'M_edge_desty.json'
+
         true_path = 'path_desty%d.txt' % dinx
         fpath_desty = 'KKdesty_num_%d.txt' % threads_num  # 'new_path_desty1.json'
         fedge_desty = 'M_edge_desty.txt'
-        axes_file =  '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
-        """
-        subpath = '../data/res_peak/'
-        true_path = 'path_desty2.json'
-        fpath_desty = 'KKdesty_num_%d.json' % threads_num  # 'new_path_desty1.json'
-        fvedge_desty = 'M_vedge_desty2.json'
-        fedge_desty = 'M_edge_desty.json'
-        graph_store_name = 'KKgraph_%d.txt' % threads_num
-        degree_file = 'KKdegree2_%d.json' % threads_num
-        axes_file = '../data/vertices.txt'
-        speed_file = '../data/AAL_NGR'
-        query_name = '../data/queries.txt'
-        """
+
         time_budget = 5000
         rout = Modified(time_budget, fpath_desty, fedge_desty, subpath, axes_file, speed_file, true_path, query_name, sigma)
         rout.main()
